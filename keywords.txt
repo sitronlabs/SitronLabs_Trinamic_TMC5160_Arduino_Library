@@ -65,6 +65,12 @@ ENC_STATUS	KEYWORD2
 encoder_deviation_clear	KEYWORD2
 driver_status_get	KEYWORD2
 DRV_STATUS	KEYWORD2
+current_set	KEYWORD2
+current_get	KEYWORD2
+spreadcycle_set	KEYWORD2
+stealthchop_enable_always	KEYWORD2
+stealthchop_enable_under	KEYWORD2
+stealthchop_disable	KEYWORD2
 convert_velocity_to_tmc	KEYWORD2
 convert_acceleration_to_tmc	KEYWORD2
 convert_speed_to_tstep	KEYWORD2

@@ -348,6 +348,7 @@ class tmc5160 {
 
     /* Setup */
     struct config {
+        float rsense = 0.075f;                                      //!< Sense resistor value in ohms. Default is 75 mΩ (as on the TMC5160-BOB evaluation board).
         union reg_gconf reg_gconf = {.raw = 0x00000004};            // EN_PWM_MODE=1 enables StealthChop (with default PWMCONF)
         union reg_drv_conf reg_drv_conf = {.raw = 0x00080400};      // DRV_CONF: BBMTIME=0, BBMCLKS=4, OTSELECT=0, DRVSTRENGTH=2, FILT_ISENSE=0
         uint32_t reg_global_scaler = 128;                           // Global current scaling (32 to 256, 0 disables scaling and uses full scale)
@@ -362,6 +363,31 @@ class tmc5160 {
     int speed_ramp_set(const float vstart, const float vstop, const float vtrans);
     int speed_limit_set(const float speed);
     int acceleration_limit_set(const float acceleration);
+
+    /**
+     * Parameters controlling the SpreadCycle chopper.
+     * Reset/default values taken from the TMC5160 quick config guide.
+     * @see Datasheet §7 "SpreadCycle and Classic Chopper" for tuning guidance.
+     */
+    struct spreadcycle_params {
+        uint8_t toff = 3;   //!< Off-time (1..15). Controls the chopper frequency. 0 would disable the driver entirely.
+        uint8_t tbl = 2;    //!< Blank time (0..3). Should typically stay at 2.
+        uint8_t hstrt = 4;  //!< Hysteresis start value (0..7).
+        uint8_t hend = 1;   //!< Hysteresis end value, offset by -3 (0..15 means -3..+12). Must satisfy hstrt + hend <= 16.
+        uint8_t tpfd = 4;   //!< Passive fast decay time (0..15). TMC5160-specific, helps dampen motor resonances at mid velocities.
+    };
+
+    /* Current control (in amps RMS) */
+    int current_set(const float irun_amps_rms, const float ihold_amps_rms, const uint8_t iholddelay = 7);
+    int current_get(float &irun_amps_rms, float &ihold_amps_rms, uint8_t &iholddelay);
+
+    /* Chopper tuning */
+    int spreadcycle_set(const struct spreadcycle_params &params);
+
+    /* StealthChop control */
+    int stealthchop_enable_always(void);
+    int stealthchop_enable_under(const float speed);
+    int stealthchop_disable(void);
 
     /* Movement start or stop */
     int move_to_position(const float position);
@@ -425,6 +451,7 @@ class tmc5160 {
     uint8_t m_status_byte = 0x00;
     uint32_t m_fclk = 12000000;                                     //!< Frequency at which the driver is running in Hz (TMC5160 default is 12 MHz internal clock)
     uint16_t m_ustep_per_step = 256;                                //!< Number of microsteps per step
+    float m_rsense = 0.075f;                                        //!< Sense resistor value in ohms, copied from the config at setup() time. Used by current_set / current_get.
     bool m_reference_l_latched = false;                             //!<
     bool m_reference_r_latched = false;                             //!<
     union reg_chopconf m_reg_chopconf_cache = {.raw = 0x000100C3};  //!< Cached CHOPCONF value (used to restore toff when re-enabling the driver)

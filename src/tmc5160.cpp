@@ -57,6 +57,9 @@ int tmc5160::setup(struct config &config) {
     /* Cache CHOPCONF so we can restore TOFF when re-enabling the driver */
     m_reg_chopconf_cache.raw = config.reg_chopconf.raw;
 
+    /* Remember the sense resistor value so current_set / current_get can do the math */
+    m_rsense = config.rsense;
+
     /* Set default speeds.
      * This is done at least here because the datasheet explicitly states that D1 and VSTOP
      * should not be set to 0 in positioning mode. */
@@ -819,6 +822,335 @@ int tmc5160::driver_status_get(enum driver_status &status) {
     } else {
         status = DRIVER_STATUS_OK;
     }
+    return 0;
+}
+
+/**
+ * Set the run and hold motor currents in amps RMS.
+ *
+ * The function picks the best combination of VSENSE (in CHOPCONF), GLOBAL_SCALER, and the
+ * IRUN / IHOLD fields to hit the requested currents as closely as possible, based on the
+ * sense resistor value provided in the config at setup() time.
+ *
+ * Tips:
+ *  - IRUN and IHOLD share the same GLOBAL_SCALER and VSENSE, so the run current ultimately
+ *    drives the available resolution.
+ *  - For the lowest noise and best microstep accuracy, aim for IRUN that ends up close to
+ *    its maximum (CS=31). This function does that automatically.
+ *  - Setting ihold to a value greater than irun is allowed (the TMC5160 does not care).
+ *
+ * @param[in] irun_amps_rms Target run current in amps RMS. Must be strictly positive.
+ * @param[in] ihold_amps_rms Target hold current in amps RMS. 0 is allowed and disables the motor current at standstill (see PWMCONF.freewheel for behavior).
+ * @param[in] iholddelay Delay before power down, in multiples of 2^18 clocks (0..15). 0 means instant, higher means smoother transition.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EINVAL If the requested current cannot be achieved even at full scale (target too high) or if iholddelay is out of range.
+ *  -EIO If there was an error communicating with the device.
+ * @see Datasheet §9 "Motor Current Control"
+ */
+int tmc5160::current_set(const float irun_amps_rms, const float ihold_amps_rms, const uint8_t iholddelay) {
+    int res;
+
+    /* Validate arguments */
+    if (irun_amps_rms < 0.0f || ihold_amps_rms < 0.0f) {
+        return -EINVAL;
+    }
+    if (iholddelay > 15) {
+        return -EINVAL;
+    }
+
+    /* Compute the full-scale RMS current for each VSENSE setting
+     * Formula: I_rms = (V_fs / (R_sense + 0.02)) / sqrt(2) at GLOBAL_SCALER=256 and CS=31/31.
+     * V_fs = 0.325 V for VSENSE=0, 0.180 V for VSENSE=1. */
+    const float rplus = m_rsense + 0.02f;
+    const float i_fs_vsense0 = 0.325f / 1.41421356f / rplus;
+    const float i_fs_vsense1 = 0.180f / 1.41421356f / rplus;
+
+    /* Pick VSENSE
+     * Prefer VSENSE=1 (higher resolution for low currents) when the run current fits in its range,
+     * otherwise fall back to VSENSE=0. */
+    uint8_t vsense;
+    float i_fs;
+    if (irun_amps_rms <= i_fs_vsense1) {
+        vsense = 1;
+        i_fs = i_fs_vsense1;
+    } else if (irun_amps_rms <= i_fs_vsense0) {
+        vsense = 0;
+        i_fs = i_fs_vsense0;
+    } else {
+        return -EINVAL;
+    }
+
+    /* Pick GLOBAL_SCALER to place IRUN near CS=31 for best resolution.
+     * At CS=31 (factor 32/32), I_rms = (GS / 256) * i_fs
+     * so ideal GS = 256 * irun / i_fs. Clamp to [32, 256]. */
+    int32_t gs = (int32_t)roundf(256.0f * irun_amps_rms / i_fs);
+    if (gs < 32) {
+        gs = 32;
+    } else if (gs > 256) {
+        gs = 256;
+    }
+
+    /* Compute CS for IRUN and IHOLD given the chosen GS and VSENSE.
+     * I_rms = (GS / 256) * ((CS + 1) / 32) * i_fs
+     * so CS = round(32 * I_rms * 256 / (GS * i_fs)) - 1, clamped to [0, 31]. */
+    const float cs_scale = 32.0f * 256.0f / ((float)gs * i_fs);
+    int32_t cs_irun = (int32_t)roundf(irun_amps_rms * cs_scale) - 1;
+    int32_t cs_ihold = (int32_t)roundf(ihold_amps_rms * cs_scale) - 1;
+    if (cs_irun < 0) {
+        cs_irun = 0;
+    } else if (cs_irun > 31) {
+        cs_irun = 31;
+    }
+    if (cs_ihold < 0) {
+        cs_ihold = 0;
+    } else if (cs_ihold > 31) {
+        cs_ihold = 31;
+    }
+
+    /* Write VSENSE into CHOPCONF (read-modify-write) */
+    union reg_chopconf reg_chopconf_new;
+    reg_chopconf_new.raw = m_reg_chopconf_cache.raw;
+    reg_chopconf_new.fields.vsense = vsense;
+
+    /* Build IHOLD_IRUN */
+    union reg_ihold_irun reg_ihold_irun_new = {0};
+    reg_ihold_irun_new.fields.ihold = (uint8_t)cs_ihold;
+    reg_ihold_irun_new.fields.irun = (uint8_t)cs_irun;
+    reg_ihold_irun_new.fields.iholddelay = iholddelay;
+
+    /* Write registers
+     * GLOBAL_SCALER uses 0 to mean "256" (full scale). Write 0 if we picked 256 for cleanliness. */
+    const uint32_t gs_reg = (gs == 256) ? 0 : (uint32_t)gs;
+    res = 0;
+    res |= register_write(reg::CHOPCONF, reg_chopconf_new.raw);
+    res |= register_write(reg::GLOBAL_SCALER, gs_reg);
+    res |= register_write(reg::IHOLD_IRUN, reg_ihold_irun_new.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Refresh the cached CHOPCONF so driver_enable/disable keeps the new VSENSE */
+    m_reg_chopconf_cache.raw = reg_chopconf_new.raw;
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * Read back the run and hold currents currently configured on the chip, in amps RMS.
+ *
+ * The values are computed from the chip's GLOBAL_SCALER, IHOLD_IRUN and CHOPCONF.VSENSE
+ * registers using the sense resistor value provided in the config at setup() time.
+ *
+ * @param[out] irun_amps_rms Current run current in amps RMS.
+ * @param[out] ihold_amps_rms Current hold current in amps RMS.
+ * @param[out] iholddelay Current iholddelay field (0..15).
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device.
+ * @see Datasheet §9 "Motor Current Control"
+ */
+int tmc5160::current_get(float &irun_amps_rms, float &ihold_amps_rms, uint8_t &iholddelay) {
+
+    /* Read the relevant registers */
+    uint32_t reg_global_scaler_raw;
+    union reg_ihold_irun reg_ihold_irun_cur = {0};
+    union reg_chopconf reg_chopconf_cur = {0};
+    if (register_read(reg::GLOBAL_SCALER, reg_global_scaler_raw) < 0) {
+        return -EIO;
+    }
+    if (register_read(reg::IHOLD_IRUN, reg_ihold_irun_cur.raw) < 0) {
+        return -EIO;
+    }
+    if (register_read(reg::CHOPCONF, reg_chopconf_cur.raw) < 0) {
+        return -EIO;
+    }
+
+    /* GLOBAL_SCALER is an 8-bit field, and the value 0 means 256 (full scale) */
+    uint32_t gs = reg_global_scaler_raw & 0xFF;
+    if (gs == 0) {
+        gs = 256;
+    }
+
+    /* Compute the full-scale RMS current for the current VSENSE setting */
+    const float rplus = m_rsense + 0.02f;
+    const float v_fs = reg_chopconf_cur.fields.vsense ? 0.180f : 0.325f;
+    const float i_fs = v_fs / 1.41421356f / rplus;
+
+    /* Reverse the formula I_rms = (GS / 256) * ((CS + 1) / 32) * i_fs */
+    const float factor = ((float)gs / 256.0f) * i_fs / 32.0f;
+    irun_amps_rms = factor * (float)(reg_ihold_irun_cur.fields.irun + 1);
+    ihold_amps_rms = factor * (float)(reg_ihold_irun_cur.fields.ihold + 1);
+    iholddelay = reg_ihold_irun_cur.fields.iholddelay;
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * Configure the SpreadCycle chopper parameters.
+ *
+ * SpreadCycle is the classic high-performance chopper mode. The default values in the
+ * @ref spreadcycle_params struct are a safe starting point that works for most motors.
+ * For best low-noise and low-vibration results, the TMC5160-Calculator tool from Trinamic
+ * can suggest motor-specific values.
+ *
+ * Also switches the chopper to SpreadCycle (CHM=0) and clears the SpreadCycle-incompatible bits.
+ *
+ * @param[in] params The SpreadCycle parameters to apply.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EINVAL If any parameter is out of range, or if HSTRT + HEND > 16 (hardware constraint).
+ *  -EIO If there was an error communicating with the device.
+ * @see Datasheet §7 "SpreadCycle and Classic Chopper"
+ */
+int tmc5160::spreadcycle_set(const struct spreadcycle_params &params) {
+
+    /* Validate ranges */
+    if (params.toff < 1 || params.toff > 15) {
+        return -EINVAL;
+    }
+    if (params.tbl > 3) {
+        return -EINVAL;
+    }
+    if (params.hstrt > 7) {
+        return -EINVAL;
+    }
+    if (params.hend > 15) {
+        return -EINVAL;
+    }
+    if (params.tpfd > 15) {
+        return -EINVAL;
+    }
+
+    /* HSTRT raw is 0..7 meaning 1..8, HEND raw is 0..15 meaning -3..+12.
+     * The datasheet §7.1 requires (decoded HSTRT) + (decoded HEND) <= 16,
+     * which in raw field terms means hstrt + hend <= 18. */
+    if ((uint16_t)params.hstrt + (uint16_t)params.hend > 18) {
+        return -EINVAL;
+    }
+
+    /* Read-modify-write CHOPCONF to preserve the other fields (vsense, mres, intpol, ...) */
+    union reg_chopconf reg_chopconf_new;
+    reg_chopconf_new.raw = m_reg_chopconf_cache.raw;
+    reg_chopconf_new.fields.toff = params.toff;
+    reg_chopconf_new.fields.tbl = params.tbl;
+    reg_chopconf_new.fields.hstrt_tfd = params.hstrt;
+    reg_chopconf_new.fields.hend_offset = params.hend;
+    reg_chopconf_new.fields.tpfd = params.tpfd;
+    reg_chopconf_new.fields.chm = 0;       // Force SpreadCycle mode
+    reg_chopconf_new.fields.tfd_3 = 0;     // Only used in chm=1
+    reg_chopconf_new.fields.disfdcc = 0;   // Only used in chm=1
+    reg_chopconf_new.fields.vhighchm = 0;  // Disable auto-switch to constant off-time chopper
+    if (register_write(reg::CHOPCONF, reg_chopconf_new.raw) < 0) {
+        return -EIO;
+    }
+
+    /* Update the cached CHOPCONF */
+    m_reg_chopconf_cache.raw = reg_chopconf_new.raw;
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * Enable StealthChop at all speeds.
+ *
+ * Sets GCONF.en_pwm_mode = 1 and TPWMTHRS = 0 so the driver uses StealthChop regardless of
+ * motor velocity. StealthChop is the silent voltage-PWM chopper mode, best for quiet operation
+ * but with reduced torque at higher speeds.
+ *
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device.
+ * @see Datasheet §8 "StealthChop"
+ */
+int tmc5160::stealthchop_enable_always(void) {
+    int res;
+
+    /* Read-modify-write GCONF to set en_pwm_mode without touching the other flags */
+    union reg_gconf reg_gconf_cur = {0};
+    if (register_read(reg::GCONF, reg_gconf_cur.raw) < 0) {
+        return -EIO;
+    }
+    reg_gconf_cur.fields.en_pwm_mode = 1;
+
+    /* Write TPWMTHRS=0 first, then enable en_pwm_mode
+     * TPWMTHRS=0 means StealthChop stays active at any velocity (no switch to SpreadCycle). */
+    res = 0;
+    res |= register_write(reg::TPWMTHRS, 0);
+    res |= register_write(reg::GCONF, reg_gconf_cur.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * Enable StealthChop below a given speed, SpreadCycle above.
+ *
+ * Sets GCONF.en_pwm_mode = 1 and configures TPWMTHRS so the driver runs StealthChop while
+ * the motor speed is below @p speed, and switches to SpreadCycle when the speed is higher.
+ * This is the recommended hybrid mode: silent at low speeds, full torque at high speeds.
+ *
+ * @param[in] speed Threshold speed in motor steps per second (not microsteps). Must be positive.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EINVAL If the speed is zero or negative.
+ *  -EIO If there was an error communicating with the device.
+ * @see Datasheet §12 "Velocity Based Mode Control"
+ */
+int tmc5160::stealthchop_enable_under(const float speed) {
+    int res;
+
+    /* Validate argument */
+    if (speed <= 0.0f) {
+        return -EINVAL;
+    }
+
+    /* Convert speed to a TSTEP threshold value
+     * The driver compares TSTEP to TPWMTHRS: TSTEP < TPWMTHRS means the motor is running
+     * faster than the threshold (smaller TSTEP = higher speed). */
+    const uint32_t tpwmthrs_value = tmc5160_clamp_u32(convert_speed_to_tstep(speed), 0xFFFFF);
+
+    /* Read-modify-write GCONF to set en_pwm_mode without touching the other flags */
+    union reg_gconf reg_gconf_cur = {0};
+    if (register_read(reg::GCONF, reg_gconf_cur.raw) < 0) {
+        return -EIO;
+    }
+    reg_gconf_cur.fields.en_pwm_mode = 1;
+
+    /* Program TPWMTHRS first, then enable en_pwm_mode */
+    res = 0;
+    res |= register_write(reg::TPWMTHRS, tpwmthrs_value);
+    res |= register_write(reg::GCONF, reg_gconf_cur.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * Disable StealthChop and use SpreadCycle at all speeds.
+ *
+ * Clears GCONF.en_pwm_mode. TPWMTHRS becomes irrelevant when StealthChop is disabled.
+ *
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device.
+ */
+int tmc5160::stealthchop_disable(void) {
+
+    /* Read-modify-write GCONF to clear en_pwm_mode without touching the other flags */
+    union reg_gconf reg_gconf_cur = {0};
+    if (register_read(reg::GCONF, reg_gconf_cur.raw) < 0) {
+        return -EIO;
+    }
+    reg_gconf_cur.fields.en_pwm_mode = 0;
+    if (register_write(reg::GCONF, reg_gconf_cur.raw) < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
     return 0;
 }
 
