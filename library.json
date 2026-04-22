@@ -1,0 +1,16 @@
+{
+    "name": "Sitron_Labs_TMC5160_Arduino_Library",
+    "version": "0.1.0",
+    "description": "Arduino library for the Trinamic TMC5160 stepper motor driver.",
+    "keywords": "sitron labs,sitron,labs,arduino,library,stepper,motor,controller,spi,trinamic,tmc5160",
+    "repository": {
+        "type": "git",
+        "url": "https:\/\/github.com\/sitronlabs\/SitronLabs_Trinamic_TMC5160_Arduino_Library.git"
+    },
+    "frameworks": "arduino",
+    "platforms": "*",
+    "dependencies": [],
+    "build": {
+        "includeDir": "src"
+    }
+}
