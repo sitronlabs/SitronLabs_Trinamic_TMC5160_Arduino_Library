@@ -389,6 +389,10 @@ class tmc5160 {
     int stealthchop_enable_under(const float speed);
     int stealthchop_disable(void);
 
+    /* StallGuard2 control */
+    int stallguard_threshold_set(int8_t threshold);
+    int stallguard_threshold_get(int8_t &threshold);
+
     /* Movement start or stop */
     int move_to_position(const float position);
     int move_at_velocity(const float velocity);
@@ -499,6 +503,8 @@ class tmc5160 {
     bool m_reg_enc_deviation_cache_valid = false;
     union reg_pwmconf m_reg_pwmconf_cache = {.raw = 0xC40C001E};
     bool m_reg_pwmconf_cache_valid = true;
+    union reg_coolconf m_reg_coolconf_cache = {.raw = 0};
+    bool m_reg_coolconf_cache_valid = true;
 };
 
 /**

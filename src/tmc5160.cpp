@@ -107,6 +107,12 @@ int tmc5160::register_read(const uint8_t address, uint32_t &data) {
             }
             data = m_reg_pwmconf_cache.raw;
             return 0;
+        case static_cast<uint8_t>(reg::COOLCONF):
+            if (!m_reg_coolconf_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_coolconf_cache.raw;
+            return 0;
         default:
             return register_read_transport(adr, data);
     }
@@ -187,6 +193,10 @@ int tmc5160::register_write(const uint8_t address, const uint32_t data) {
         case static_cast<uint8_t>(reg::PWMCONF):
             m_reg_pwmconf_cache.raw = data;
             m_reg_pwmconf_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::COOLCONF):
+            m_reg_coolconf_cache.raw = data;
+            m_reg_coolconf_cache_valid = true;
             break;
         default:
             break;
@@ -1275,6 +1285,63 @@ int tmc5160::microstep_interpolation_get(bool &enable) {
         return -EIO;
     }
     enable = reg_chopconf.fields.intpol == 1;
+    return 0;
+}
+
+/**
+ * @brief Set the StallGuard2 threshold.
+ * @param[in] threshold The StallGuard2 threshold. Must be between -64 and 63.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EINVAL If the threshold is invalid
+ *  -EIO If there was an error communicating with the device
+ */
+int tmc5160::stallguard_threshold_set(int8_t threshold) {
+    int res;
+
+    /* Validate the threshold */
+    if (threshold < -64 || threshold > 63) {
+        return -EINVAL;
+    }
+
+    /* Read-modify-write COOLCONF */
+    union reg_coolconf reg_coolconf = {0};
+    res = register_read(reg::COOLCONF, reg_coolconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+    reg_coolconf.fields.sgt = (uint8_t)(threshold & 0x7Fu);
+    res = register_write(reg::COOLCONF, reg_coolconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * @brief Get the StallGuard2 threshold.
+ * @param[out] threshold The StallGuard2 threshold.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device
+ */
+int tmc5160::stallguard_threshold_get(int8_t &threshold) {
+    int res;
+
+    /* Read the COOLCONF register */
+    union reg_coolconf reg_coolconf = {0};
+    res = register_read(reg::COOLCONF, reg_coolconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Extract the threshold value */
+    threshold = (int8_t)(reg_coolconf.fields.sgt & 0x7Fu);
+    if (threshold & 0x40U) {
+        threshold = (int8_t)(threshold | 0x80U);
+    }
+
+    /* Return success */
     return 0;
 }
 
