@@ -341,10 +341,10 @@ class tmc5160 {
         } __attribute__((packed)) fields;
     };
 
-    /* Register access */
+    /* Register access (NVI: caching in register_read / register_write, transport in *_transport) */
     virtual int status_read(uint8_t &status) = 0;
-    virtual int register_read(const uint8_t address, uint32_t &data) = 0;
-    virtual int register_write(const uint8_t address, const uint32_t data) = 0;
+    int register_read(const uint8_t address, uint32_t &data);
+    int register_write(const uint8_t address, const uint32_t data);
 
     /* Setup */
     struct config {
@@ -445,16 +445,60 @@ class tmc5160 {
     int driver_status_get(enum driver_status &status);
 
    protected:
+    /* Conversion functions */
     uint32_t convert_velocity_to_tmc(const float velocity);
     uint32_t convert_acceleration_to_tmc(const float acceleration);
     uint32_t convert_speed_to_tstep(const float speed);
+
+    /* Transport functions */
+    virtual int register_read_transport(const uint8_t address, uint32_t &data) = 0;
+    virtual int register_write_transport(const uint8_t address, const uint32_t data) = 0;
+
+    /* Internal states */
     uint8_t m_status_byte = 0x00;
-    uint32_t m_fclk = 12000000;                                     //!< Frequency at which the driver is running in Hz (TMC5160 default is 12 MHz internal clock)
-    uint16_t m_ustep_per_step = 256;                                //!< Number of microsteps per step
-    float m_rsense = 0.075f;                                        //!< Sense resistor value in ohms, copied from the config at setup() time. Used by current_set / current_get.
-    bool m_reference_l_latched = false;                             //!<
-    bool m_reference_r_latched = false;                             //!<
-    union reg_chopconf m_reg_chopconf_cache = {.raw = 0x000100C3};  //!< Cached CHOPCONF value (used to restore toff when re-enabling the driver)
+    uint32_t m_fclk = 12000000;           //!< Frequency at which the driver is running in Hz (TMC5160 default is 12 MHz internal clock)
+    uint16_t m_ustep_per_step = 256;      //!< Number of microsteps per step
+    float m_rsense = 0.075f;              //!< Sense resistor value in ohms, copied from the config at setup() time. Used by current_set / current_get.
+    bool m_reference_l_latched = false;   //!<
+    bool m_reference_r_latched = false;   //!<
+    uint8_t m_chopconf_toff_restore = 0;  //!< TOFF value to restore when driver_enable() is called
+
+    /* Write-only register shadows: value + flag set after a successful register_write from this driver
+     * For some of them, the datasheet provides a POR value, so we can set the shadow to the POR value. */
+    union reg_short_conf m_reg_short_conf_cache = {.raw = 0};
+    bool m_reg_short_conf_cache_valid = false;
+    union reg_drv_conf m_reg_drv_conf_cache = {.raw = 0};
+    bool m_reg_drv_conf_cache_valid = false;
+    uint32_t m_reg_global_scaler_cache = 0;
+    bool m_reg_global_scaler_cache_valid = true;
+    union reg_ihold_irun m_reg_ihold_irun_cache = {.raw = 0};
+    bool m_reg_ihold_irun_cache_valid = false;
+    union reg_tpowerdown m_reg_tpowerdown_cache = {.raw = 0x0000000A};
+    bool m_reg_tpowerdown_cache_valid = true;
+    union reg_tpwmthrs m_reg_tpwmthrs_cache = {.raw = 0};
+    bool m_reg_tpwmthrs_cache_valid = false;
+    uint32_t m_reg_vstart_cache = 0;
+    bool m_reg_vstart_cache_valid = false;
+    uint32_t m_reg_a_1_cache = 0;
+    bool m_reg_a_1_cache_valid = false;
+    uint32_t m_reg_v_1_cache = 0;
+    bool m_reg_v_1_cache_valid = false;
+    uint32_t m_reg_amax_cache = 0;
+    bool m_reg_amax_cache_valid = false;
+    uint32_t m_reg_vmax_cache = 0;
+    bool m_reg_vmax_cache_valid = false;
+    uint32_t m_reg_dmax_cache = 0;
+    bool m_reg_dmax_cache_valid = false;
+    uint32_t m_reg_d_1_cache = 0;
+    bool m_reg_d_1_cache_valid = false;
+    uint32_t m_reg_vstop_cache = 1;
+    bool m_reg_vstop_cache_valid = true;
+    uint32_t m_reg_enc_const_cache = 0;
+    bool m_reg_enc_const_cache_valid = false;
+    uint32_t m_reg_enc_deviation_cache = 0;
+    bool m_reg_enc_deviation_cache_valid = false;
+    union reg_pwmconf m_reg_pwmconf_cache = {.raw = 0xC40C001E};
+    bool m_reg_pwmconf_cache_valid = true;
 };
 
 /**
@@ -465,10 +509,11 @@ class tmc5160_spi : public tmc5160 {
    public:
     int setup(struct config &config, SPIClass &spi_library, const int spi_cs_pin, const int spi_speed = 4000000);
     int status_read(uint8_t &status);
-    int register_read(const uint8_t address, uint32_t &data);
-    int register_write(const uint8_t address, const uint32_t data);
 
    protected:
+    int register_read_transport(const uint8_t address, uint32_t &data) override;
+    int register_write_transport(const uint8_t address, const uint32_t data) override;
+
     SPIClass *m_spi_library = NULL;
     uint8_t m_spi_cs_pin;
     SPISettings m_spi_settings;

@@ -1,6 +1,199 @@
 /* Self header */
 #include "tmc5160.h"
 
+int tmc5160::register_read(const uint8_t address, uint32_t &data) {
+    const uint8_t adr = address & 0x7Fu;
+
+    switch (adr) {
+        case static_cast<uint8_t>(reg::SHORT_CONF):
+            if (!m_reg_short_conf_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_short_conf_cache.raw;
+            return 0;
+        case static_cast<uint8_t>(reg::DRV_CONF):
+            if (!m_reg_drv_conf_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_drv_conf_cache.raw;
+            return 0;
+        case static_cast<uint8_t>(reg::GLOBAL_SCALER):
+            if (!m_reg_global_scaler_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_global_scaler_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::IHOLD_IRUN):
+            if (!m_reg_ihold_irun_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_ihold_irun_cache.raw;
+            return 0;
+        case static_cast<uint8_t>(reg::TPOWERDOWN):
+            if (!m_reg_tpowerdown_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_tpowerdown_cache.raw;
+            return 0;
+        case static_cast<uint8_t>(reg::TPWMTHRS):
+            if (!m_reg_tpwmthrs_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_tpwmthrs_cache.raw;
+            return 0;
+        case static_cast<uint8_t>(reg::VSTART):
+            if (!m_reg_vstart_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_vstart_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::A_1):
+            if (!m_reg_a_1_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_a_1_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::V_1):
+            if (!m_reg_v_1_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_v_1_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::AMAX):
+            if (!m_reg_amax_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_amax_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::VMAX):
+            if (!m_reg_vmax_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_vmax_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::DMAX):
+            if (!m_reg_dmax_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_dmax_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::D_1):
+            if (!m_reg_d_1_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_d_1_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::VSTOP):
+            if (!m_reg_vstop_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_vstop_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::ENC_CONST):
+            if (!m_reg_enc_const_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_enc_const_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::ENC_DEVIATION):
+            if (!m_reg_enc_deviation_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_enc_deviation_cache;
+            return 0;
+        case static_cast<uint8_t>(reg::PWMCONF):
+            if (!m_reg_pwmconf_cache_valid) {
+                return -EIO;
+            }
+            data = m_reg_pwmconf_cache.raw;
+            return 0;
+        default:
+            return register_read_transport(adr, data);
+    }
+}
+
+int tmc5160::register_write(const uint8_t address, const uint32_t data) {
+    const uint8_t adr = address & 0x7Fu;
+    const int res = register_write_transport(adr, data);
+    if (res < 0) {
+        return res;
+    }
+
+    switch (adr) {
+        case static_cast<uint8_t>(reg::SHORT_CONF):
+            m_reg_short_conf_cache.raw = data;
+            m_reg_short_conf_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::DRV_CONF):
+            m_reg_drv_conf_cache.raw = data;
+            m_reg_drv_conf_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::GLOBAL_SCALER):
+            m_reg_global_scaler_cache = data;
+            m_reg_global_scaler_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::IHOLD_IRUN):
+            m_reg_ihold_irun_cache.raw = data;
+            m_reg_ihold_irun_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::TPOWERDOWN):
+            m_reg_tpowerdown_cache.raw = data;
+            m_reg_tpowerdown_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::TPWMTHRS):
+            m_reg_tpwmthrs_cache.raw = data;
+            m_reg_tpwmthrs_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::VSTART):
+            m_reg_vstart_cache = data;
+            m_reg_vstart_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::A_1):
+            m_reg_a_1_cache = data;
+            m_reg_a_1_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::V_1):
+            m_reg_v_1_cache = data;
+            m_reg_v_1_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::AMAX):
+            m_reg_amax_cache = data;
+            m_reg_amax_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::VMAX):
+            m_reg_vmax_cache = data;
+            m_reg_vmax_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::DMAX):
+            m_reg_dmax_cache = data;
+            m_reg_dmax_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::D_1):
+            m_reg_d_1_cache = data;
+            m_reg_d_1_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::VSTOP):
+            m_reg_vstop_cache = data;
+            m_reg_vstop_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::ENC_CONST):
+            m_reg_enc_const_cache = data;
+            m_reg_enc_const_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::ENC_DEVIATION):
+            m_reg_enc_deviation_cache = data;
+            m_reg_enc_deviation_cache_valid = true;
+            break;
+        case static_cast<uint8_t>(reg::PWMCONF):
+            m_reg_pwmconf_cache.raw = data;
+            m_reg_pwmconf_cache_valid = true;
+            break;
+        default:
+            break;
+    }
+    return 0;
+}
+
 /**
  * Clamp helper that works regardless of Arduino min/max macro definitions.
  * This avoids the classic min/max type mismatch issues on Arduino ESP32.
@@ -53,9 +246,6 @@ int tmc5160::setup(struct config &config) {
     if (res < 0) {
         return -EIO;
     }
-
-    /* Cache CHOPCONF so we can restore TOFF when re-enabling the driver */
-    m_reg_chopconf_cache.raw = config.reg_chopconf.raw;
 
     /* Remember the sense resistor value so current_set / current_get can do the math */
     m_rsense = config.rsense;
@@ -319,9 +509,25 @@ int tmc5160::velocity_current_get(float &velocity) {
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::driver_enable(void) {
-    if (register_write(reg::CHOPCONF, m_reg_chopconf_cache.raw) < 0) {
+    int res;
+
+    /* Read the CHOPCONF register */
+    union reg_chopconf reg_chopconf;
+    res = register_read(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
         return -EIO;
     }
+
+    /* Restore the TOFF value to the cached value */
+    reg_chopconf.fields.toff = m_chopconf_toff_restore;
+
+    /* Write the CHOPCONF register */
+    res = register_write(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
     return 0;
 }
 
@@ -331,12 +537,26 @@ int tmc5160::driver_enable(void) {
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::driver_disable(void) {
-    union reg_chopconf reg_chopconf_disabled;
-    reg_chopconf_disabled.raw = m_reg_chopconf_cache.raw;
-    reg_chopconf_disabled.fields.toff = 0;
-    if (register_write(reg::CHOPCONF, reg_chopconf_disabled.raw) < 0) {
+    int res;
+
+    /* Backup the TOFF value to restore when driver_enable() is called */
+    union reg_chopconf reg_chopconf;
+    res = register_read(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
         return -EIO;
     }
+    if (reg_chopconf.fields.toff != 0) {
+        m_chopconf_toff_restore = reg_chopconf.fields.toff;
+    }
+
+    /* Set TOFF=0 in CHOPCONF */
+    reg_chopconf.fields.toff = 0;
+    res = register_write(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
     return 0;
 }
 
@@ -908,9 +1128,12 @@ int tmc5160::current_set(const float irun_amps_rms, const float ihold_amps_rms, 
     }
 
     /* Write VSENSE into CHOPCONF (read-modify-write) */
-    union reg_chopconf reg_chopconf_new;
-    reg_chopconf_new.raw = m_reg_chopconf_cache.raw;
-    reg_chopconf_new.fields.vsense = vsense;
+    union reg_chopconf reg_chopconf;
+    res = register_read(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+    reg_chopconf.fields.vsense = vsense;
 
     /* Build IHOLD_IRUN */
     union reg_ihold_irun reg_ihold_irun_new = {0};
@@ -922,15 +1145,12 @@ int tmc5160::current_set(const float irun_amps_rms, const float ihold_amps_rms, 
      * GLOBAL_SCALER uses 0 to mean "256" (full scale). Write 0 if we picked 256 for cleanliness. */
     const uint32_t gs_reg = (gs == 256) ? 0 : (uint32_t)gs;
     res = 0;
-    res |= register_write(reg::CHOPCONF, reg_chopconf_new.raw);
+    res |= register_write(reg::CHOPCONF, reg_chopconf.raw);
     res |= register_write(reg::GLOBAL_SCALER, gs_reg);
     res |= register_write(reg::IHOLD_IRUN, reg_ihold_irun_new.raw);
     if (res < 0) {
         return -EIO;
     }
-
-    /* Refresh the cached CHOPCONF so driver_enable/disable keeps the new VSENSE */
-    m_reg_chopconf_cache.raw = reg_chopconf_new.raw;
 
     /* Return success */
     return 0;
@@ -1003,6 +1223,7 @@ int tmc5160::current_get(float &irun_amps_rms, float &ihold_amps_rms, uint8_t &i
  * @see Datasheet §7 "SpreadCycle and Classic Chopper"
  */
 int tmc5160::spreadcycle_set(const struct spreadcycle_params &params) {
+    int res;
 
     /* Validate ranges */
     if (params.toff < 1 || params.toff > 15) {
@@ -1029,23 +1250,24 @@ int tmc5160::spreadcycle_set(const struct spreadcycle_params &params) {
     }
 
     /* Read-modify-write CHOPCONF to preserve the other fields (vsense, mres, intpol, ...) */
-    union reg_chopconf reg_chopconf_new;
-    reg_chopconf_new.raw = m_reg_chopconf_cache.raw;
-    reg_chopconf_new.fields.toff = params.toff;
-    reg_chopconf_new.fields.tbl = params.tbl;
-    reg_chopconf_new.fields.hstrt_tfd = params.hstrt;
-    reg_chopconf_new.fields.hend_offset = params.hend;
-    reg_chopconf_new.fields.tpfd = params.tpfd;
-    reg_chopconf_new.fields.chm = 0;       // Force SpreadCycle mode
-    reg_chopconf_new.fields.tfd_3 = 0;     // Only used in chm=1
-    reg_chopconf_new.fields.disfdcc = 0;   // Only used in chm=1
-    reg_chopconf_new.fields.vhighchm = 0;  // Disable auto-switch to constant off-time chopper
-    if (register_write(reg::CHOPCONF, reg_chopconf_new.raw) < 0) {
+    union reg_chopconf reg_chopconf;
+    res = register_read(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
         return -EIO;
     }
-
-    /* Update the cached CHOPCONF */
-    m_reg_chopconf_cache.raw = reg_chopconf_new.raw;
+    reg_chopconf.fields.toff = params.toff;
+    reg_chopconf.fields.tbl = params.tbl;
+    reg_chopconf.fields.hstrt_tfd = params.hstrt;
+    reg_chopconf.fields.hend_offset = params.hend;
+    reg_chopconf.fields.tpfd = params.tpfd;
+    reg_chopconf.fields.chm = 0;       // Force SpreadCycle mode
+    reg_chopconf.fields.tfd_3 = 0;     // Only used in chm=1
+    reg_chopconf.fields.disfdcc = 0;   // Only used in chm=1
+    reg_chopconf.fields.vhighchm = 0;  // Disable auto-switch to constant off-time chopper
+    res = register_write(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
 
     /* Return success */
     return 0;

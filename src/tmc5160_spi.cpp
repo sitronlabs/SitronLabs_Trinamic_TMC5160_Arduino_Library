@@ -75,7 +75,7 @@ int tmc5160_spi::status_read(uint8_t &status) {
  *  -EINVAL If the driver has not been set up yet
  *  -EIO If there was an error communicating with the device
  */
-int tmc5160_spi::register_read(const uint8_t address, uint32_t &data) {
+int tmc5160_spi::register_read_transport(const uint8_t address, uint32_t &data) {
 
     /* Ensure setup has been done */
     if (m_spi_library == NULL) {
@@ -133,7 +133,7 @@ int tmc5160_spi::register_read(const uint8_t address, uint32_t &data) {
  *  -EINVAL If the driver has not been set up yet
  *  -EIO If there was an error communicating with the device
  */
-int tmc5160_spi::register_write(const uint8_t address, const uint32_t data) {
+int tmc5160_spi::register_write_transport(const uint8_t address, const uint32_t data) {
 
     /* Ensure setup has been done */
     if (m_spi_library == NULL) {
