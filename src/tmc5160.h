@@ -7,6 +7,7 @@
 
 /* C/C++ libraries */
 #include <errno.h>
+#include <stdint.h>
 
 /**
  *
