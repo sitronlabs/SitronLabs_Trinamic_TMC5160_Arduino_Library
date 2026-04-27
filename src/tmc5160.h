@@ -370,11 +370,11 @@ class tmc5160 {
     int microstep_interpolation_set(bool enable);
     int microstep_interpolation_get(bool &enable);
 
-    /**
-     * Parameters controlling the SpreadCycle chopper.
-     * Reset/default values taken from the TMC5160 quick config guide.
-     * @see Datasheet §7 "SpreadCycle and Classic Chopper" for tuning guidance.
-     */
+    /* Current control (in amps RMS) */
+    int current_set(const float irun_amps_rms, const float ihold_amps_rms, const uint8_t iholddelay = 7);
+    int current_get(float &irun_amps_rms, float &ihold_amps_rms, uint8_t &iholddelay);
+
+    /* SpreadCycle control */
     struct spreadcycle_params {
         uint8_t toff = 3;   //!< Off-time (1..15). Controls the chopper frequency. 0 would disable the driver entirely.
         uint8_t tbl = 2;    //!< Blank time (0..3). Should typically stay at 2.
@@ -382,12 +382,6 @@ class tmc5160 {
         uint8_t hend = 1;   //!< Hysteresis end value, offset by -3 (0..15 means -3..+12). Must satisfy hstrt + hend <= 16.
         uint8_t tpfd = 4;   //!< Passive fast decay time (0..15). TMC5160-specific, helps dampen motor resonances at mid velocities.
     };
-
-    /* Current control (in amps RMS) */
-    int current_set(const float irun_amps_rms, const float ihold_amps_rms, const uint8_t iholddelay = 7);
-    int current_get(float &irun_amps_rms, float &ihold_amps_rms, uint8_t &iholddelay);
-
-    /* Chopper tuning */
     int spreadcycle_set(const struct spreadcycle_params &params);
 
     /* StealthChop control */
