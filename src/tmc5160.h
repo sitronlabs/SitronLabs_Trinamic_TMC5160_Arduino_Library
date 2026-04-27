@@ -435,18 +435,7 @@ class tmc5160 {
     int encoder_deviation_clear(void);
 
     /* Driver status */
-    enum driver_status {
-        DRIVER_STATUS_OK,         // No error condition
-        DRIVER_STATUS_CP_UV,      // Charge pump undervoltage
-        DRIVER_STATUS_S2VSA,      // Short to supply phase A
-        DRIVER_STATUS_S2VSB,      // Short to supply phase B
-        DRIVER_STATUS_S2GA,       // Short to ground phase A
-        DRIVER_STATUS_S2GB,       // Short to ground phase B
-        DRIVER_STATUS_OT,         // Overtemperature (error)
-        DRIVER_STATUS_OTHER_ERR,  // GSTAT drv_err is set but none of the above conditions is found
-        DRIVER_STATUS_OTPW,       // Overtemperature pre-warning
-    };
-    int driver_status_get(enum driver_status &status);
+    int driver_status_get(union reg_drv_status &status);
 
    protected:
     /* Conversion functions */

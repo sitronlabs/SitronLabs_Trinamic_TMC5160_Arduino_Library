@@ -1103,40 +1103,21 @@ int tmc5160::encoder_deviation_clear(void) {
 }
 
 /**
- *
- * @param[out] status
+ * @brief Get the driver status.
+ * @param[out] status The driver status.
  * @return 0 in case of success, or a negative error code otherwise, in particular:
  *  -EIO If there was an error communicating with the device
  */
-int tmc5160::driver_status_get(enum driver_status &status) {
-    union reg_gstat reg_gstat = {0};
-    union reg_drv_status reg_drv_status = {0};
-    if (register_read(reg::GSTAT, reg_gstat.raw) < 0) {
-        return -EIO;
-    }
-    if (register_read(reg::DRV_STATUS, reg_drv_status.raw) < 0) {
+int tmc5160::driver_status_get(union reg_drv_status &status) {
+    int res;
+
+    /* Read the DRV_STATUS register */
+    res = register_read(reg::DRV_STATUS, status.raw);
+    if (res < 0) {
         return -EIO;
     }
 
-    if (reg_gstat.fields.uv_cp) {
-        status = DRIVER_STATUS_CP_UV;
-    } else if (reg_drv_status.fields.s2vsa) {
-        status = DRIVER_STATUS_S2VSA;
-    } else if (reg_drv_status.fields.s2vsb) {
-        status = DRIVER_STATUS_S2VSB;
-    } else if (reg_drv_status.fields.s2ga) {
-        status = DRIVER_STATUS_S2GA;
-    } else if (reg_drv_status.fields.s2gb) {
-        status = DRIVER_STATUS_S2GB;
-    } else if (reg_drv_status.fields.ot) {
-        status = DRIVER_STATUS_OT;
-    } else if (reg_gstat.fields.drv_err) {
-        status = DRIVER_STATUS_OTHER_ERR;
-    } else if (reg_drv_status.fields.otpw) {
-        status = DRIVER_STATUS_OTPW;
-    } else {
-        status = DRIVER_STATUS_OK;
-    }
+    /* Return success */
     return 0;
 }
 
