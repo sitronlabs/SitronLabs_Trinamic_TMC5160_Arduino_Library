@@ -364,6 +364,12 @@ class tmc5160 {
     int speed_limit_set(const float speed);
     int acceleration_limit_set(const float acceleration);
 
+    /* Microstepping */
+    int microstep_resolution_set(uint16_t resolution);
+    int microstep_resolution_get(uint16_t &resolution);
+    int microstep_interpolation_set(bool enable);
+    int microstep_interpolation_get(bool &enable);
+
     /**
      * Parameters controlling the SpreadCycle chopper.
      * Reset/default values taken from the TMC5160 quick config guide.
@@ -425,8 +431,8 @@ class tmc5160 {
     /* Encoder */
     int encoder_position_get(float &position);
     int encoder_position_set(const float position);
-    int encoder_resolution_set(const int32_t motor_steps, const int32_t encoder_resolution, const bool inverted = false);
-    int encoder_deviation_set(const int32_t steps);
+    int encoder_resolution_set(const uint32_t motor_steps_per_turn, const uint32_t encoder_pulses_per_turn, const bool inverted = false);
+    int encoder_deviation_set(const uint32_t steps);
     int encoder_deviation_detected_is(void);
     int encoder_deviation_clear(void);
 
@@ -456,12 +462,12 @@ class tmc5160 {
 
     /* Internal states */
     uint8_t m_status_byte = 0x00;
-    uint32_t m_fclk = 12000000;           //!< Frequency at which the driver is running in Hz (TMC5160 default is 12 MHz internal clock)
-    uint16_t m_ustep_per_step = 256;      //!< Number of microsteps per step
-    float m_rsense = 0.075f;              //!< Sense resistor value in ohms, copied from the config at setup() time. Used by current_set / current_get.
-    bool m_reference_l_latched = false;   //!<
-    bool m_reference_r_latched = false;   //!<
-    uint8_t m_chopconf_toff_restore = 0;  //!< TOFF value to restore when driver_enable() is called
+    uint32_t m_fclk = 12000000;                        //!< Frequency at which the driver is running in Hz (TMC5160 default is 12 MHz internal clock)
+    static constexpr uint16_t m_ustep_per_step = 256;  //!< Driver uses this internally, regardless of the microstep resolution mres.
+    float m_rsense = 0.075f;                           //!< Sense resistor value in ohms, copied from the config at setup() time. Used by current_set / current_get.
+    bool m_reference_l_latched = false;                //!<
+    bool m_reference_r_latched = false;                //!<
+    uint8_t m_chopconf_toff_restore = 0;               //!< TOFF value to restore when driver_enable() is called
 
     /* Write-only register shadows: value + flag set after a successful register_write from this driver
      * For some of them, the datasheet provides a POR value, so we can set the shadow to the POR value. */

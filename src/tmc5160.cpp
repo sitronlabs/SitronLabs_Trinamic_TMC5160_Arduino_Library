@@ -352,8 +352,8 @@ int tmc5160::acceleration_limit_set(const float acceleration) {
 }
 
 /**
- *
- * @param[in] position
+ * @brief Move to a position.
+ * @param[in] position The position to move to, in full steps.
  * @return 0 in case of success, or a negative error code otherwise, in particular:
  *  -EIO If there was an error communicating with the device
  */
@@ -419,32 +419,45 @@ int tmc5160::move_stop(void) {
 }
 
 /**
- *
- * @param[out] position
+ * @brief Get the current position.
+ * @param[out] position The current position (in full steps).
  * @return 0 in case of success, or a negative error code otherwise, in particular:
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::position_current_get(float &position) {
+    int res;
+
+    /* Retrieve actual position */
     uint32_t reg_xactual;
-    if (register_read(reg::XACTUAL, reg_xactual) < 0) {
+    res = register_read(reg::XACTUAL, reg_xactual);
+    if (res < 0) {
         return -EIO;
     }
     position = (int32_t)reg_xactual;
     position /= m_ustep_per_step;
+
+    /* Return success */
     return 0;
 }
 
 /**
- *
- * @param[in] position
+ * @brief Set the current position.
+ * @note This function normally should only be called when homing the drive. In positioning mode, modifying the register content will start a motion.
+ * @param[in] position The position to set, in full steps.
  * @return 0 in case of success, or a negative error code otherwise, in particular:
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::position_current_set(const float position) {
+    int res;
+
+    /* Set XACTUAL */
     int32_t reg_xactual = roundf(position * m_ustep_per_step);
-    if (register_write(reg::XACTUAL, (uint32_t)reg_xactual) < 0) {
+    res = register_write(reg::XACTUAL, (uint32_t)reg_xactual);
+    if (res < 0) {
         return -EIO;
     }
+
+    /* Return success */
     return 0;
 }
 
@@ -455,12 +468,18 @@ int tmc5160::position_current_set(const float position) {
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::position_latched_get(float &position) {
+    int res;
+
+    /* Retrieve the latched position */
     uint32_t reg_xlatch;
-    if (register_read(reg::XLATCH, reg_xlatch) < 0) {
+    res = register_read(reg::XLATCH, reg_xlatch);
+    if (res < 0) {
         return -EIO;
     }
     position = (int32_t)reg_xlatch;
     position /= m_ustep_per_step;
+
+    /* Return success */
     return 0;
 }
 
@@ -471,12 +490,18 @@ int tmc5160::position_latched_get(float &position) {
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::position_target_get(float &position) {
+    int res;
+
+    /* Retrieve the target position */
     uint32_t reg_xtarget;
-    if (register_read(reg::XTARGET, reg_xtarget) < 0) {
+    res = register_read(reg::XTARGET, reg_xtarget);
+    if (res < 0) {
         return -EIO;
     }
     position = (int32_t)reg_xtarget;
     position /= m_ustep_per_step;
+
+    /* Return success */
     return 0;
 }
 
@@ -487,8 +512,12 @@ int tmc5160::position_target_get(float &position) {
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::velocity_current_get(float &velocity) {
+    int res;
+
+    /* Retrieve the actual velocity */
     uint32_t reg_vactual;
-    if (register_read(reg::VACTUAL, reg_vactual) < 0) {
+    res = register_read(reg::VACTUAL, reg_vactual);
+    if (res < 0) {
         return -EIO;
     }
 
@@ -500,6 +529,8 @@ int tmc5160::velocity_current_get(float &velocity) {
 
     /* Convert back to steps per second */
     velocity = (float)signed_vactual * ((float)m_fclk / (float)(1ul << 24)) / (float)m_ustep_per_step;
+
+    /* Return success */
     return 0;
 }
 
@@ -805,15 +836,16 @@ int tmc5160::reference_r_latch_enable(bool polarity) {
 
 /**
  *
- * @param[out] position
+ * @param[out] position The latched position (in full steps).
  * @return 1 if the latched position is available, 0 if it is not, or a negative error code otherwise.
  */
 int tmc5160::reference_l_latch_get(float &position) {
+    int res;
 
-    /* Read bit 2 status_latch_l of RAMP_STAT
-     * 1: Latch left ready */
+    /* Read  status_latch_l of RAMP_STAT */
     uint32_t reg_ramp_status;
-    if (register_read(reg::RAMP_STAT, reg_ramp_status) < 0) {
+    res = register_read(reg::RAMP_STAT, reg_ramp_status);
+    if (res < 0) {
         return -EIO;
     }
 
@@ -823,30 +855,40 @@ int tmc5160::reference_l_latch_get(float &position) {
 
     /* If latched position is available */
     if (m_reference_l_latched) {
+
+        /* Retrieve the latched position */
         uint32_t reg_xlatch;
-        if (register_read(reg::XLATCH, reg_xlatch) < 0) {
+        res = register_read(reg::XLATCH, reg_xlatch);
+        if (res < 0) {
             return -EIO;
         }
         position = (int32_t)reg_xlatch;
         position /= m_ustep_per_step;
+
+        /* Reset flag */
         m_reference_l_latched = false;
+
+        /* Return found */
         return 1;
     } else {
+
+        /* Return not found */
         return 0;
     }
 }
 
 /**
  *
- * @param[out] position
+ * @param[out] position The latched position (in full steps).
  * @return 1 if the latched position is available, 0 if it is not, or a negative error code otherwise.
  */
 int tmc5160::reference_r_latch_get(float &position) {
+    int res;
 
-    /* Read bit 3 status_latch_r of RAMP_STAT
-     * 1: Latch right ready */
+    /* Read status_latch_r of RAMP_STAT */
     uint32_t reg_ramp_status;
-    if (register_read(reg::RAMP_STAT, reg_ramp_status) < 0) {
+    res = register_read(reg::RAMP_STAT, reg_ramp_status);
+    if (res < 0) {
         return -EIO;
     }
 
@@ -856,105 +898,144 @@ int tmc5160::reference_r_latch_get(float &position) {
 
     /* If latched position is available */
     if (m_reference_r_latched) {
+
+        /* Retrieve the latched position */
         uint32_t reg_xlatch;
-        if (register_read(reg::XLATCH, reg_xlatch) < 0) {
+        res = register_read(reg::XLATCH, reg_xlatch);
+        if (res < 0) {
             return -EIO;
         }
         position = (int32_t)reg_xlatch;
         position /= m_ustep_per_step;
+
+        /* Reset flag */
         m_reference_r_latched = false;
+
+        /* Return found */
         return 1;
     } else {
+
+        /* Return not found */
         return 0;
     }
 }
 
 /**
  *
- * @param[out] position
+ * @param[out] position The encoder position (in full steps).
  * @return 0 in case of success, or a negative error code otherwise, in particular:
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::encoder_position_get(float &position) {
+    int res;
+
+    /* Retrieve the encoder position */
     uint32_t reg_x_enc;
-    if (register_read(reg::X_ENC, reg_x_enc) < 0) {
+    res = register_read(reg::X_ENC, reg_x_enc);
+    if (res < 0) {
         return -EIO;
     }
     position = (int32_t)reg_x_enc;
     position /= m_ustep_per_step;
+
+    /* Return success */
     return 0;
 }
 
 /**
  *
- * @param[in] position
+ * @param[in] position The encoder position to set (in full steps).
  * @return 0 in case of success, or a negative error code otherwise, in particular:
  *  -EIO If there was an error communicating with the device
  */
 int tmc5160::encoder_position_set(const float position) {
+    int res;
+
+    /* Set the encoder position */
     int32_t reg_x_enc = roundf(position * m_ustep_per_step);
-    if (register_write(reg::X_ENC, (uint32_t)reg_x_enc) < 0) {
+    res = register_write(reg::X_ENC, (uint32_t)reg_x_enc);
+    if (res < 0) {
         return -EIO;
     }
+
+    /* Return success */
     return 0;
 }
 
 /**
  * Configure the encoder prescaler so the encoder counter X_ENC tracks the motor position.
- * @param[in] motor_steps Motor full steps per turn (typically 200).
- * @param[in] encoder_resolution Encoder pulses per turn.
+ * @warning This hasn't been tested yet.
+ * @param[in] motor_steps_per_turn Motor (full) steps per turn.
+ * @param[in] encoder_pulses_per_turn Encoder pulses per turn.
  * @param[in] inverted Whether the encoder rotation is inverted compared to the motor rotation.
  * @return 1 if an exact match was found using binary mode, 0 if the decimal mode approximation was used, or a negative error code otherwise.
  * @see Datasheet §22.2 "Encoder Prescaler"
  */
-int tmc5160::encoder_resolution_set(const int32_t motor_steps, const int32_t encoder_resolution, const bool inverted) {
+int tmc5160::encoder_resolution_set(const uint32_t motor_steps_per_turn, const uint32_t encoder_pulses_per_turn, const bool inverted) {
     int res;
 
     /* Ensure arguments are valid */
-    if (motor_steps <= 0 || encoder_resolution <= 0) {
+    if (motor_steps_per_turn == 0 || encoder_pulses_per_turn == 0) {
         return -EINVAL;
     }
 
-    /* Compute the ratio */
-    float factor = (float)motor_steps * (float)m_ustep_per_step / (float)encoder_resolution;
+    /* Check wether the binary prescaler gives an exact match */
+    const uint64_t microsteps_per_turn = (uint64_t)motor_steps_per_turn * m_ustep_per_step;
+    const uint64_t numerator = microsteps_per_turn * 65536ULL;
+    const bool exact = (numerator % encoder_pulses_per_turn) == 0;
 
-    /* Check if the binary prescaler gives an exact match */
-    union reg_encmode reg_encmode = {0};
-    if (register_read(reg::ENCMODE, reg_encmode.raw) < 0) {
-        return -EIO;
-    }
-    if ((int64_t)(factor * 65536.0f) * encoder_resolution == (int64_t)motor_steps * m_ustep_per_step * 65536LL) {
+    /* If the binary prescaler gives an exact match */
+    if (exact == true) {
 
         /* Use binary mode */
+        union reg_encmode reg_encmode = {0};
+        if (register_read(reg::ENCMODE, reg_encmode.raw) < 0) {
+            return -EIO;
+        }
         reg_encmode.fields.enc_sel_decimal = 0;
-        int32_t enc_const = (int32_t)(factor * 65536.0f);
+        int32_t enc_const = (int32_t)(numerator / encoder_pulses_per_turn);
         if (inverted) {
             enc_const = -enc_const;
         }
-        res = 0;
-        res |= register_write(reg::ENCMODE, reg_encmode.raw);
-        res |= register_write(reg::ENC_CONST, (uint32_t)enc_const);
-        if (res < 0) {
+        if (register_write(reg::ENCMODE, reg_encmode.raw) < 0) {
             return -EIO;
         }
+        if (register_write(reg::ENC_CONST, (uint32_t)enc_const) < 0) {
+            return -EIO;
+        }
+
+        /* Return exact match */
         return 1;
-    } else {
+    }
+
+    /* If the binary prescaler does not give an exact match */
+    else {
 
         /* Use decimal mode */
-        reg_encmode.fields.enc_sel_decimal = 1;
-        int integer_part = (int)floor(factor);
-        int decimal_part = (int)((factor - (float)integer_part) * 10000.0f);
-        if (inverted) {
-            integer_part = 65535 - integer_part;
-            decimal_part = 10000 - decimal_part;
-        }
-        int32_t enc_const = integer_part * 65536 + decimal_part;
-        res = 0;
-        res |= register_write(reg::ENCMODE, reg_encmode.raw);
-        res |= register_write(reg::ENC_CONST, (uint32_t)enc_const);
-        if (res < 0) {
+        union reg_encmode reg_encmode = {0};
+        if (register_read(reg::ENCMODE, reg_encmode.raw) < 0) {
             return -EIO;
         }
+        reg_encmode.fields.enc_sel_decimal = 1;
+        uint32_t integer_part = (uint32_t)(microsteps_per_turn / encoder_pulses_per_turn);
+        uint32_t decimal_part = (uint32_t)(((microsteps_per_turn - (uint64_t)integer_part * encoder_pulses_per_turn) * 10000ULL) / encoder_pulses_per_turn);
+        if (inverted) {  // Negate per datasheet §20: (2^16 - (FACTOR+1)).(10000 - DECIMALS) when DECIMALS != 0, otherwise (2^16 - FACTOR).0 (no borrow into the integer part).
+            if (decimal_part == 0) {
+                integer_part = 65536 - integer_part;
+            } else {
+                integer_part = 65535 - integer_part;
+                decimal_part = 10000 - decimal_part;
+            }
+        }
+        int32_t enc_const = integer_part * 65536 + decimal_part;
+        if (register_write(reg::ENCMODE, reg_encmode.raw) < 0) {
+            return -EIO;
+        }
+        if (register_write(reg::ENC_CONST, (uint32_t)enc_const) < 0) {
+            return -EIO;
+        }
+
+        /* Return decimal mode */
         return 0;
     }
 }
@@ -966,18 +1047,22 @@ int tmc5160::encoder_resolution_set(const int32_t motor_steps, const int32_t enc
  *  -EINVAL If the argument is invalid
  *  -EIO If there was an error communicating with the device
  */
-int tmc5160::encoder_deviation_set(const int32_t steps) {
+int tmc5160::encoder_deviation_set(const uint32_t steps) {
+    int res;
 
-    /* Ensure argument is valid */
-    if (steps < 0) {
+    /* Ensure we don't exceed the 20-bit field */
+    if (steps > 0xFFFFFu / m_ustep_per_step) {
         return -EINVAL;
     }
 
-    /* ENC_DEVIATION is a 20-bit field */
-    uint32_t reg_enc_deviation = tmc5160_clamp_u32((uint32_t)steps * m_ustep_per_step, 0xFFFFF);
-    if (register_write(reg::ENC_DEVIATION, reg_enc_deviation) < 0) {
+    /* Write the register value */
+    uint32_t reg_enc_deviation = steps * m_ustep_per_step;
+    res = register_write(reg::ENC_DEVIATION, reg_enc_deviation);
+    if (res < 0) {
         return -EIO;
     }
+
+    /* Return success */
     return 0;
 }
 
@@ -1042,6 +1127,154 @@ int tmc5160::driver_status_get(enum driver_status &status) {
     } else {
         status = DRIVER_STATUS_OK;
     }
+    return 0;
+}
+
+/**
+ * @brief Set the microstep resolution.
+ * @param[in] resolution The microstep resolution.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EINVAL If the resolution is invalid
+ *  -EIO If there was an error communicating with the device
+ */
+int tmc5160::microstep_resolution_set(uint16_t resolution) {
+    int res;
+
+    /* Ensure argument is valid */
+    uint8_t mres;
+    switch (resolution) {
+        case 256U:
+            mres = 0U;
+            break;
+        case 128U:
+            mres = 1U;
+            break;
+        case 64U:
+            mres = 2U;
+            break;
+        case 32U:
+            mres = 3U;
+            break;
+        case 16U:
+            mres = 4U;
+            break;
+        case 8U:
+            mres = 5U;
+            break;
+        case 4U:
+            mres = 6U;
+            break;
+        case 2U:
+            mres = 7U;
+            break;
+        case 1U:
+            mres = 8U;
+            break;
+        default:
+            return -EINVAL;
+    }
+
+    /* Read-modify-write CHOPCONF */
+    union reg_chopconf reg_chopconf = {0};
+    if (register_read(reg::CHOPCONF, reg_chopconf.raw) < 0) {
+        return -EIO;
+    }
+    reg_chopconf.fields.mres = mres;
+    res = register_write(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * @brief Get the microstep resolution.
+ * @param[out] resolution The number of microsteps per step.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device
+ */
+int tmc5160::microstep_resolution_get(uint16_t &resolution) {
+
+    /* Read mres field of chopconf register */
+    union reg_chopconf reg_chopconf = {0};
+    if (register_read(reg::CHOPCONF, reg_chopconf.raw) < 0) {
+        return -EIO;
+    }
+    switch (reg_chopconf.fields.mres) {
+        case 0:
+            resolution = 256;
+            break;
+        case 1:
+            resolution = 128;
+            break;
+        case 2:
+            resolution = 64;
+            break;
+        case 3:
+            resolution = 32;
+            break;
+        case 4:
+            resolution = 16;
+            break;
+        case 5:
+            resolution = 8;
+            break;
+        case 6:
+            resolution = 4;
+            break;
+        case 7:
+            resolution = 2;
+            break;
+        case 8:
+            resolution = 1;
+            break;
+        default:
+            return -EINVAL;
+    }
+
+    /* Return success */
+    return 0;
+}
+
+/**
+ * @brief Enable or disable microstep interpolation.
+ * @note Only useful for STEP/DIR operation.
+ * @param[in] enable True if interpolation is enabled, false otherwise.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device
+ */
+int tmc5160::microstep_interpolation_set(bool enable) {
+    int res;
+    union reg_chopconf reg_chopconf = {0};
+    res = register_read(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+    reg_chopconf.fields.intpol = enable ? 1 : 0;
+    res = register_write(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+    return 0;
+}
+
+/**
+ * @brief Get the microstep interpolation status.
+ * @note Only useful for STEP/DIR operation.
+ * @param[out] enable True if interpolation is enabled, false otherwise.
+ * @return 0 in case of success, or a negative error code otherwise, in particular:
+ *  -EIO If there was an error communicating with the device
+ */
+int tmc5160::microstep_interpolation_get(bool &enable) {
+    int res;
+    union reg_chopconf reg_chopconf = {0};
+    res = register_read(reg::CHOPCONF, reg_chopconf.raw);
+    if (res < 0) {
+        return -EIO;
+    }
+    enable = reg_chopconf.fields.intpol == 1;
     return 0;
 }
 
@@ -1377,36 +1610,53 @@ int tmc5160::stealthchop_disable(void) {
 }
 
 /**
+ * @brief Convert a velocity in full steps per second to a TMC5160 velocity register value.
  *
- * @see Datasheet, section 14.1 Real World Unit Conversion
+ * Uses the datasheet formula: v[Hz] = v[5160] * (fCLK / 2) / 2^23, rearranged as
+ * v[5160] = v[Hz] * 2^24 / fCLK, where v[Hz] = velocity * 256 (USC).
+ *
+ * @param[in] velocity Velocity in full steps per second (must be positive).
+ * @return Register value suitable for VMAX, VSTART, VSTOP, V1, etc.
+ * @note Callers are responsible for clamping the result to the target register's bit width.
+ * @see Datasheet section 12.1 "Real World Unit Conversion"
  */
 uint32_t tmc5160::convert_velocity_to_tmc(const float velocity) {
-    return (int32_t)(velocity / ((float)m_fclk / (float)(1ul << 24)) * (float)m_ustep_per_step);
+    return (uint32_t)(velocity / ((float)m_fclk / (float)(1ul << 24)) * 256.0f);
 }
 
 /**
+ * @brief Convert an acceleration in full steps per second squared to a TMC5160 acceleration register value.
  *
- * @see Datasheet, section 14.1 Real World Unit Conversion
+ * Uses the datasheet formula: a[Hz/s] = a[5160] * fCLK^2 / (512 * 256) / 2^24, rearranged as
+ * a[5160] = a[Hz/s] * 512 * 256 * 2^24 / fCLK^2, where a[Hz/s] = acceleration * 256 (USC).
+ *
+ * @param[in] acceleration Acceleration in full steps per second squared (must be positive).
+ * @return Register value suitable for AMAX, DMAX, A1, D1.
+ * @note Callers are responsible for clamping the result to the target register's bit width.
+ * @see Datasheet section 12.1 "Real World Unit Conversion"
  */
 uint32_t tmc5160::convert_acceleration_to_tmc(const float acceleration) {
-    return (int32_t)(acceleration / ((float)m_fclk * (float)m_fclk / (512.0f * 256.0f) / (float)(1ul << 24)) * (float)m_ustep_per_step);
+    return (uint32_t)(acceleration / ((float)m_fclk * (float)m_fclk / (512.0f * 256.0f) / (float)(1ul << 24)) * 256.0f);
 }
 
 /**
- * Convert a threshold speed (steps/second) into a TSTEP value for registers
- * TPWMTHRS, TCOOLTHRS, THIGH.
- * @see Datasheet, section 12 Velocity Based Mode Control
+ * @brief Convert a threshold speed in full steps per second to a TSTEP register value.
+ *
+ * TSTEP is the measured time between two 1/256 microsteps in units of 1/fCLK.
+ * Uses the datasheet formula: TSTEP = fCLK / (speed * 256), where 256 is USC.
+ * The result is clamped to the 20-bit register range [0, 2^20 - 1].
+ *
+ * @param[in] speed Speed in full steps per second (must be positive).
+ * @return Register value suitable for TPWMTHRS, TCOOLTHRS, THIGH.
+ * @see Datasheet section 12.1 "Real World Unit Conversion"
  */
 uint32_t tmc5160::convert_speed_to_tstep(const float speed) {
     if (speed <= 0.0f) {
         return 0;
     }
-    float tstep = (float)m_fclk / (speed * 256.0f);
-    if (tstep < 0.0f) {
-        return 0;
-    } else if (tstep > 1048575.0f) {
+    const float tstep = (float)m_fclk / (speed * 256.0f);
+    if (tstep > 1048575.0f) {
         return 1048575;
-    } else {
-        return (uint32_t)tstep;
     }
+    return (uint32_t)tstep;
 }
